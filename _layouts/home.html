@@ -1,67 +1,287 @@
----
-layout: base
----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oil Type FAP Validator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: auto;
+      padding: 2rem;
+      background: #f9f9f9;
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+    }
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #f0f0f0;
+    }
+    input[type="text"], select {
+      width: 100%;
+      padding: 8px 12px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 1rem;
+    }
+    button {
+      padding: 12px;
+      background-color: #0066cc;
+      color: white;
+      font-size: 1rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 1rem;
+    }
+    button:hover {
+      background-color: #004999;
+    }
+    #result, #warning {
+      margin-top: 1.5rem;
+      font-size: 1.1rem;
+    }
+    #warning {
+      color: darkorange;
+    }
+    .match-bar {
+      margin: 8px 0;
+      background: #eee;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .match-bar-inner {
+      height: 20px;
+      background: #4caf50;
+      color: white;
+      text-align: center;
+      line-height: 20px;
+      white-space: nowrap;
+    }
+    .add-acid-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 1rem;
+    }
+    .add-acid-container select {
+      flex: 1;
+    }
+    .add-acid-container button {
+      width: auto;
+      padding: 8px 16px;
+    }
+    .acid-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .acid-row select {
+      flex: 1;
+      max-width: 150px;
+    }
+    .acid-row input {
+      width: 150px;
+      padding: 8px 12px;
+    }
+    .remove-acid {
+      background: #ff4444;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .remove-acid:hover {
+      background: #cc0000;
+    }
+    @media (max-width: 500px) {
+      body {
+        padding: 1rem;
+      }
+      .add-acid-container, .acid-row {
+        flex-direction: column;
+      }
+      .acid-row input, .acid-row select {
+        width: 100%;
+        max-width: 100%;
+      }
+    }
+  </style>
+  <script>
+    const allAcids = [
+      "C6:0", "C8:0", "C10:0", "C12:0", "C14:0", "C16:0", 
+      "C16:1", "C17:0", "C17:1", "C18:0", "C18:1", "C18:2", 
+      "C18:3", "C20:0", "C20:1", "C20:2", "C22:0", "C22:1", 
+      "C22:2", "C24:0", "C24:1"
+    ];
 
-<div class="home">
-  {%- if page.title -%}
-    <h1 class="page-heading">{{ page.title }}</h1>
-  {%- endif -%}
+    async function loadStandards() {
+      const response = await fetch('all_16_highlighted_oil_fatty_acid_standards.json');
+      return await response.json();
+    }
 
-  {{ content }}
+    function parseFAPValue(value) {
+      if (value.trim().toLowerCase() === "nd") {
+        return 0.049;
+      }
+      return parseFloat(value);
+    }
 
+    function scoreFAP(userInput, standards) {
+      const scores = [];
+      for (const [oil, acids] of Object.entries(standards)) {
+        let matchCount = 0;
+        for (const [acid, [min, max]] of Object.entries(acids)) {
+          if (acid in userInput) {
+            const value = parseFAPValue(userInput[acid]);
+            if (!isNaN(value) && value >= min && value <= max) {
+              matchCount++;
+            }
+          }
+        }
+        scores.push({ oil, matchCount });
+      }
+      scores.sort((a, b) => b.matchCount - a.matchCount);
+      return scores;
+    }
 
-  {% if site.paginate %}
-    {% assign posts = paginator.posts %}
-  {% else %}
-    {% assign posts = site.posts %}
-  {% endif %}
+    function addAcidRow(selectedAcid = "") {
+      const container = document.getElementById("acids-container");
+      const row = document.createElement("div");
+      row.className = "acid-row";
+      
+      const select = document.createElement("select");
+      allAcids.forEach(acid => {
+        const option = document.createElement("option");
+        option.value = acid;
+        option.textContent = acid;
+        option.selected = acid === selectedAcid;
+        select.appendChild(option);
+      });
+      
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "Value (%)";
+      input.name = selectedAcid || allAcids[0];
+      
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "remove-acid";
+      removeBtn.textContent = "×";
+      removeBtn.onclick = () => row.remove();
+      
+      // Update input name when selection changes
+      select.onchange = () => {
+        input.name = select.value;
+      };
+      
+      row.appendChild(select);
+      row.appendChild(input);
+      row.appendChild(removeBtn);
+      container.appendChild(row);
+    }
 
+    async function handleSubmit() {
+      const standards = await loadStandards();
+      const form = document.getElementById("fap-form");
+      const formData = new FormData(form);
+      const userFAP = {};
+      
+      // Get all acid inputs
+      const acidInputs = document.querySelectorAll(".acid-row input");
+      acidInputs.forEach(input => {
+        if (input.value.trim() !== "") {
+          userFAP[input.name] = input.value;
+        }
+      });
 
-  {%- if posts.size > 0 -%}
-    {%- if page.list_title -%}
-      <h2 class="post-list-heading">{{ page.list_title }}</h2>
-    {%- endif -%}
-    <ul class="post-list">
-      {%- assign date_format = site.minima.date_format | default: "%b %-d, %Y" -%}
-      {%- for post in posts -%}
-      <li>
-        <span class="post-meta">{{ post.date | date: date_format }}</span>
-        <h3>
-          <a class="post-link" href="{{ post.url | relative_url }}">
-            {{ post.title | escape }}
-          </a>
-        </h3>
-        {%- if site.minima.show_excerpts -%}
-          {{ post.excerpt }}
-        {%- endif -%}
-      </li>
-      {%- endfor -%}
-    </ul>
+      const resultArea = document.getElementById("result");
+      const warningArea = document.getElementById("warning");
+      resultArea.innerHTML = "";
+      warningArea.innerText = "";
 
-    {% if site.paginate %}
-      <div class="pager">
-        <ul class="pagination">
-        {%- if paginator.previous_page %}
-          <li>
-            <a href="{{ paginator.previous_page_path | relative_url }}" class="previous-page" title="Go to Page {{ paginator.previous_page }}">
-              {{ paginator.previous_page }}
-            </a>
-          </li>
-        {%- else %}
-          <li><div class="pager-edge">•</div></li>
-        {%- endif %}
-          <li><div class="current-page">{{ paginator.page }}</div></li>
-        {%- if paginator.next_page %}
-          <li>
-            <a href="{{ paginator.next_page_path | relative_url }}" class="next-page" title="Go to Page {{ paginator.next_page }}">
-              {{ paginator.next_page }}
-            </a>
-          </li>
-        {%- else %}
-          <li><div class="pager-edge">•</div></li>
-        {%- endif %}
-        </ul>
-      </div>
-    {%- endif %}
-  {%- endif -%}
-</div>
+      const scores = scoreFAP(userFAP, standards);
+      const topMatch = scores[0];
+
+      if (!topMatch || topMatch.matchCount === 0) {
+        resultArea.innerHTML = "Your oil might not be pure according to the standards.";
+        return;
+      }
+
+      const bestMatches = scores.filter(s => s.matchCount === topMatch.matchCount);
+
+      if (bestMatches.length === 1) {
+        resultArea.innerHTML = `✅ This is pure <strong>${bestMatches[0].oil}</strong> oil.`;
+      } else {
+        resultArea.innerHTML = `⚠️ Multiple oils matched equally: ${bestMatches.map(s => s.oil).join(", ")}.<br>Please enter more data for a clearer result.`;
+      }
+    }
+
+    // Initialize with one acid row
+    window.onload = function() {
+      addAcidRow();
+    };
+  </script>
+</head>
+<body>
+  <h1>Oil Type Detection</h1>
+  <p>Enter your Fatty Acid Profile (FAP) values in % (you may type <strong>ND</strong> for values below 0.05%)</p>
+
+  <form id="fap-form" onsubmit="event.preventDefault(); handleSubmit();">
+    <div class="add-acid-container">
+      <select id="acid-select">
+        <option value="">Select an acid to add</option>
+        <option value="C6:0">C6:0</option>
+        <option value="C8:0">C8:0</option>
+        <option value="C10:0">C10:0</option>
+        <option value="C12:0">C12:0</option>
+        <option value="C14:0">C14:0</option>
+        <option value="C16:0">C16:0</option>
+        <option value="C16:1">C16:1</option>
+        <option value="C17:0">C17:0</option>
+        <option value="C17:1">C17:1</option>
+        <option value="C18:0">C18:0</option>
+        <option value="C18:1">C18:1</option>
+        <option value="C18:2">C18:2</option>
+        <option value="C18:3">C18:3</option>
+        <option value="C20:0">C20:0</option>
+        <option value="C20:1">C20:1</option>
+        <option value="C20:2">C20:2</option>
+        <option value="C22:0">C22:0</option>
+        <option value="C22:1">C22:1</option>
+        <option value="C22:2">C22:2</option>
+        <option value="C24:0">C24:0</option>
+        <option value="C24:1">C24:1</option>
+      </select>
+      <button type="button" onclick="addAcidRow(document.getElementById('acid-select').value)">Add Acid</button>
+    </div>
+    
+    <div id="acids-container"></div>
+    
+    <button type="submit">Detect Oil</button>
+  </form>
+
+  <div id="warning"></div>
+  <div id="result"></div>
+</body>
+</html>
